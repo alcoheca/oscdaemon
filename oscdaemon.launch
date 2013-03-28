@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if [ $ACTION == "add" ]
+then
+  killall oscdaemon.service oscdaemon
+  killall oscdaemon.service oscdaemon
+  /usr/local/bin/oscdaemon.service >>/var/log/oscdaemon_stdout.log 2>>/var/log/oscdaemon_stderr.log &
+else
+  killall oscdaemon.service oscdaemon
+  killall oscdaemon.service oscdaemon
+fi

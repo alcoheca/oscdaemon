@@ -1,0 +1,1 @@
+SUBSYSTEM=="tty", ENV{ID_SERIAL}="FTDI_FT232R_USB_UART_A4012YJD", SYMLINK+="arduino", RUN+="/usr/local/bin/oscdaemon.launch"
