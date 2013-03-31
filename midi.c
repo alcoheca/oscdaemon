@@ -9,8 +9,8 @@ int out_port;
 snd_seq_addr_t seq_addr;
 snd_seq_event_t ev;
 
-unsigned int midi_blink_step = 0;
-int midi_blink_rate = 300;
+unsigned int step = 0;
+int midi_blink_rate = 125;
 int midi_mode[3] = {0,0,0};
 
 int midi_leds[NUM_LOOPS][15][4] = {
@@ -64,30 +64,52 @@ int midi_leds[NUM_LOOPS][15][4] = {
   }
 };
 
-void midi_init()
+int midi_init()
 {
   if (snd_seq_open(&seq_handle, "hw", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
-    fprintf(stderr, "Error opening ALSA sequencer.\n");
-    return;
+    printf("Error opening ALSA sequencer.\n");
+    return -1;
   }
   snd_seq_set_client_name(seq_handle, "MidiSend");
   if ((out_port = snd_seq_create_simple_port(seq_handle, "MidiSend",
                   SND_SEQ_PORT_CAP_READ|SND_SEQ_PORT_CAP_SUBS_READ,
                   SND_SEQ_PORT_TYPE_APPLICATION)) < 0) {
     printf("error opening port\n");
-    return;
+    return -1;
   }
   snd_seq_parse_address(seq_handle, &seq_addr, KONTROLADDR);
-  snd_seq_connect_to(seq_handle, out_port, seq_addr.client, seq_addr.port);
+  if  (snd_seq_connect_to(seq_handle, out_port, seq_addr.client, seq_addr.port) <0) {
+    printf("error connecting to kontrol\n");
+    return 0;
+  }
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_subs(&ev);
   snd_seq_ev_set_direct(&ev);
   snd_seq_ev_set_source(&ev, out_port);
+  return 0;
 }
 
 void midi_close()
 {
   snd_seq_close(seq_handle);
+}
+
+void update_midi_leds()
+{
+  int i;
+  for (i=0;i<NUM_LOOPS;i++) {
+    midi_led(64+i,midi_leds[i][midi_mode[i]][step]);
+  }
+  step = (step+1) %4;
+}
+
+void* midi_blinken(void *params)
+{
+  step = 0;
+  do {
+    update_midi_leds();
+    poll(0, 0, midi_blink_rate);
+  } while (1);
 }
 
 void midi_led(int num, int onoff)

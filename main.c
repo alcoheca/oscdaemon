@@ -20,6 +20,8 @@ static const char* commands[12] = {
 
 unsigned mode = 0;
 
+pthread_t midi_blinker;
+
 /* prototypes *********************************************************/
 void do_shutdown(int ret);
 void register_sl_cbs();
@@ -29,6 +31,8 @@ int sl_ping_cb(const char *path, const char *types, lo_arg **argv, int argc,
 int sl_state_cb(const char *path, const char *types, lo_arg **argv, int argc,
                     void *data, void *user_data);
 int sl_rate_cb(const char *path, const char *types, lo_arg **argv, int argc,
+                    void *data, void *user_data);
+int sl_loop_cb(const char *path, const char *types, lo_arg **argv, int argc,
                     void *data, void *user_data);
 void update_mode();
 
@@ -42,6 +46,7 @@ void sig_handler(int signum) {
 
 void update_mode()
 {
+  printf("setting mode\n");
   if (mode == 1) {
     send_serial("-0");
     send_serial("+1");
@@ -59,27 +64,30 @@ void update_mode()
 void do_shutdown(int ret)
 {
   //send_serial("!\n");
-  close(serial);
+  close(ser_fd);
   printf("shutting down..\n");
   unregister_sl_cbs();
   printf("stopping msgs thread\n");
-  if (msgs) lo_server_thread_stop(msgs);
+  //if (msgs) lo_server_thread_stop(msgs);
   printf("freeing msgs thread\n");
-  if (msgs) lo_server_thread_free(msgs);
+  //if (msgs) lo_server_thread_free(msgs);
   free((void*)osc_host);
   exit(ret);
 }
 
 void register_sl_cbs()
 {
+  lo_timetag_now(&lastheard);
   unregister_sl_cbs();
 
-  lo_server_thread_add_method(msgs, "/ping", "ssi", sl_ping_cb, NULL);
-  lo_server_thread_add_method(msgs, osc_cb_state, "isf", sl_state_cb, NULL);
-  lo_server_thread_add_method(msgs, osc_cb_rate, "isf", sl_rate_cb, NULL);
+  lo_server_add_method(msgs, "/ping", "ssi", sl_ping_cb, NULL);
+  lo_server_add_method(msgs, osc_cb_state, "isf", sl_state_cb, NULL);
+  lo_server_add_method(msgs, osc_cb_rate, "isf", sl_rate_cb, NULL);
+  lo_server_add_method(msgs, osc_cb_loop, "isf", sl_loop_cb, NULL);
   int i;
-  reg_cb(-3,"state\0",osc_cb_state);
-  reg_cb(-3,"rate_output\0",osc_cb_rate);
+  reg_cb(-3,"state",osc_cb_state);
+  reg_cb(-3,"rate_output",osc_cb_rate);
+  reg_cb(-2,"selected_loop_num", osc_cb_loop);
   for (i=0;i<NUM_LOOPS;i++) {
     reg_cb(i,"state\0",osc_cb_state);
     reg_cb(i,"rate_output\0",osc_cb_rate);
@@ -91,6 +99,7 @@ void unregister_sl_cbs()
   int i;
   unreg_cb(-3,"state\0",osc_cb_state);
   unreg_cb(-3,"rate_output\0",osc_cb_rate);
+  unreg_cb(-2,"selected_loop_num", osc_cb_loop);
   for (i=0;i<NUM_LOOPS;i++) {
     unreg_cb(i,"state",osc_cb_state);
     unreg_cb(i,"rate_output",osc_cb_rate);
@@ -114,12 +123,14 @@ void send_command(int press, int command)
   }
 }
 
-void read_serial(const int len)
+int read_serial(const int len)
 {
   char buffer[2];
-  int err = read(serial, &buffer, sizeof(buffer));
-  if (err <0)
+  int err = read(ser_fd, &buffer, sizeof(buffer));
+  if (err <0) {
     perror("error reading\n");
+    return -1;
+  }
   else if (err ==2) {
     if (buffer[1] == '0') {
       // mode change
@@ -139,63 +150,67 @@ void read_serial(const int len)
       send_command(press, diff + buffer[1] - '0' - 1);
     }
   }
-}
-
-void update_midi_leds()
-{
-  int i;
-  for (i=0;i<NUM_LOOPS;i++) {
-    midi_led(64+i,midi_leds[i][midi_mode[i]][midi_blink_step]);
-  }
+  return 0;
 }
 
 int main(int argc, char *argv[])
 {
   signal(SIGINT, sig_handler);
 
-  serial = init_serialport("/dev/ttyUSB0");
-  if (serial < 0) do_shutdown(1);
+  ser_fd = init_serialport("/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A4012YJD-if00-port0");
+  if (ser_fd < 0) do_shutdown(1);
 
-  msgs = lo_server_thread_new("9961", osc_error);
-
-  lo_server_thread_start(msgs);
+  msgs = lo_server_new("9961", osc_error);
 
   sl = lo_address_new("ragtop", "9951");
-  osc_host = lo_server_thread_get_url(msgs);
+  osc_host = lo_server_get_url(msgs);
   printf("we are %s\n", osc_host);
 
-
-  midi_init();
   register_sl_cbs();
   lo_timetag_now(&lastheard);
 
-  update_mode();
-  struct timeval  tv;
-  gettimeofday(&tv, NULL);
+  fd_set rfds;
+  int retval;
+  int lo_fd = lo_server_get_socket_fd(msgs);
 
-  double blink = ((tv.tv_sec) * 1000 + (tv.tv_usec) / 1000) + midi_blink_rate;
+  /* midi blinken */
+  if (midi_init() != 0)
+    do_shutdown(1);
+  update_mode();
+  pthread_create(&midi_blinker, NULL, midi_blinken, (void*)NULL);
+
+  int max_fd = (lo_fd > ser_fd ? lo_fd : ser_fd) + 1;
+
   while(1) {
     lo_timetag now;
     lo_timetag_now(&now);
     double diff = lo_timetag_diff(now,lastheard);
     if(diff > REINIT) {
+      printf("registering\n");
       register_sl_cbs();
     }
     else if(diff > MAX_WAIT) {
+      printf("not heard\n");
       send_ping();
     }
-    gettimeofday(&tv, NULL);
-    double current = ((tv.tv_sec) * 1000 + (tv.tv_usec) / 1000);
-    if (current > blink) {
-      blink = current + midi_blink_rate;
-      update_midi_leds();
-      midi_blink_step = (midi_blink_step+1) %4;
+
+    FD_ZERO(&rfds);
+    FD_SET(lo_fd, &rfds);
+    FD_SET(ser_fd, &rfds);
+    retval = select(max_fd, &rfds, NULL, NULL, NULL); /* no timeout */
+    if (retval == -1) {
+      printf("select() error\n");
+      do_shutdown(1);
+    } else if (retval > 0) {
+      if (FD_ISSET(lo_fd, &rfds)) lo_server_recv_noblock(msgs, 0);
+      if (FD_ISSET(ser_fd, &rfds)) {
+        if (read_serial(2) <0) break;
+      }
     }
-    usleep(500);
-  //  read_serial(2);
   }
 
   do_shutdown(0);
+  return 0;
 }
 
 int sl_ping_cb(const char *path, const char *types, lo_arg **argv, int argc,
@@ -205,9 +220,14 @@ int sl_ping_cb(const char *path, const char *types, lo_arg **argv, int argc,
   return 0;
 }
 
-int sl_selected_cb(const char *path, const char *types, lo_arg **argv, int argc,
+int sl_loop_cb(const char *path, const char *types, lo_arg **argv, int argc,
 		 void *data, void *user_data)
 {
+  lo_timetag_now(&lastheard);
+  int i;
+  for (i=0;i<NUM_LOOPS;i++) {
+    midi_led(32+i, i == (int)argv[2]->f);
+  }
   return 0;
 }
 
@@ -220,7 +240,6 @@ int sl_state_cb(const char *path, const char *types, lo_arg **argv, int argc,
     return 0;
 
   if (argv[0]->i>=0) {
-    printf("single state change\n");
     if (argv[2]->f == 10.f)
       midi_led(48+argv[0]->i,1);
     else
@@ -233,7 +252,8 @@ int sl_state_cb(const char *path, const char *types, lo_arg **argv, int argc,
     mode+=97;
     char msg[2];
     sprintf(msg, "#%c", mode);
-    send_serial(msg);
+    if (send_serial(msg) != 0)
+      do_shutdown(1);
   }
   return 0;
 }

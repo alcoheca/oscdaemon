@@ -5,6 +5,7 @@
 const char* osc_host = NULL;
 const char* osc_cb_state = "/ard/state";
 const char* osc_cb_rate = "/ard/rate";
+const char* osc_cb_loop = "/ard/loop";
 
 void osc_error(int num, const char *msg, const char *where)
 {
@@ -32,8 +33,14 @@ int osc_generic_handler(const char *path, const char *types, lo_arg **argv,
 
 void reg_cb(int loop, const char* monitor, const char* cb_addr)
 {
+  if (!sl)
+    return;
+
   char addr[27];
-  sprintf(addr, "/sl/%d/register_auto_update", loop);
+  if (loop == -2)
+    sprintf(addr, "/register_auto_update");
+  else
+    sprintf(addr, "/sl/%d/register_auto_update", loop);
   if (lo_send(sl, addr, "siss", monitor, 200, osc_host, cb_addr) == -1) {
     printf("OSC error %d: %s\n", lo_address_errno(sl), lo_address_errstr(sl));
   }
@@ -41,8 +48,14 @@ void reg_cb(int loop, const char* monitor, const char* cb_addr)
 
 void unreg_cb(int loop, const char* monitor, const char* cb_addr)
 {
+  if (!sl)
+    return;
+
   char addr[29];
-  sprintf(addr, "/sl/%d/unregister_auto_update", loop);
+  if (loop == -2)
+    sprintf(addr, "/unregister_auto_update");
+  else
+    sprintf(addr, "/sl/%d/unregister_auto_update", loop);
   if (lo_send(sl, addr, "siss", monitor, 200, osc_host, cb_addr) == -1) {
     printf("OSC error %d: %s\n", lo_address_errno(sl), lo_address_errstr(sl));
   }

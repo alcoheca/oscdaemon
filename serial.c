@@ -28,7 +28,7 @@ int init_serialport(const char* port)
     perror("init_serialport: Couldn't get term attributes");
     return -1;
   }
-  speed_t brate = B57600;
+  speed_t brate = B115200;
   cfsetispeed(&toptions, brate);
   cfsetospeed(&toptions, brate);
 
@@ -58,9 +58,12 @@ int init_serialport(const char* port)
   return fd;
 }
 
-void send_serial(const char* str)
+int send_serial(const char* str)
 {
     int len = strlen(str);
-    write(serial, str, len);
+    if(write(ser_fd, str, len) < 0)
+      return 1;
+
+    return 0;
 }
 

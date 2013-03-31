@@ -9,6 +9,7 @@ lo_timetag lastheard;
 extern const char* osc_host;
 extern const char* osc_cb_state;
 extern const char* osc_cb_rate;
+extern const char* osc_cb_loop;
 
 void osc_error(int num, const char *msg, const char *where);
 int  osc_generic_handler(const char *path, const char *types, lo_arg **argv,

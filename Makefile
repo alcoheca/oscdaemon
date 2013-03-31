@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -g -DNUM_LOOPS=3
-LIBS = -llo -lasound
+LIBS = -llo -lasound -lpthread
 SRCS = main.c serial.c osc.c midi.c
 OBJS = $(SRCS:.c=.o)
 MAIN = oscdaemon
