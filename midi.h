@@ -1,6 +1,6 @@
 #ifndef SL_MIDI
 #define SL_MIDI
-int midi_init();
+void midi_init();
 void midi_close();
 void midi_led(int num, int onoff);
 void* midi_blinken(void *params);

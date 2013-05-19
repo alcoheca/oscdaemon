@@ -64,29 +64,25 @@ int midi_leds[NUM_LOOPS][15][4] = {
   }
 };
 
-int midi_init()
+void midi_init()
 {
   if (snd_seq_open(&seq_handle, "hw", SND_SEQ_OPEN_DUPLEX, 0) < 0) {
-    printf("Error opening ALSA sequencer.\n");
-    return -1;
+    fprintf(stderr, "Error opening ALSA sequencer.\n");
+    return;
   }
   snd_seq_set_client_name(seq_handle, "MidiSend");
   if ((out_port = snd_seq_create_simple_port(seq_handle, "MidiSend",
                   SND_SEQ_PORT_CAP_READ|SND_SEQ_PORT_CAP_SUBS_READ,
                   SND_SEQ_PORT_TYPE_APPLICATION)) < 0) {
     printf("error opening port\n");
-    return -1;
+    return;
   }
   snd_seq_parse_address(seq_handle, &seq_addr, KONTROLADDR);
-  if  (snd_seq_connect_to(seq_handle, out_port, seq_addr.client, seq_addr.port) <0) {
-    printf("error connecting to kontrol\n");
-    return 0;
-  }
+  snd_seq_connect_to(seq_handle, out_port, seq_addr.client, seq_addr.port);
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_subs(&ev);
   snd_seq_ev_set_direct(&ev);
   snd_seq_ev_set_source(&ev, out_port);
-  return 0;
 }
 
 void midi_close()

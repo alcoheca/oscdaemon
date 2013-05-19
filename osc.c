@@ -33,9 +33,6 @@ int osc_generic_handler(const char *path, const char *types, lo_arg **argv,
 
 void reg_cb(int loop, const char* monitor, const char* cb_addr)
 {
-  if (!sl)
-    return;
-
   char addr[27];
   if (loop == -2)
     sprintf(addr, "/register_auto_update");
@@ -48,9 +45,6 @@ void reg_cb(int loop, const char* monitor, const char* cb_addr)
 
 void unreg_cb(int loop, const char* monitor, const char* cb_addr)
 {
-  if (!sl)
-    return;
-
   char addr[29];
   if (loop == -2)
     sprintf(addr, "/unregister_auto_update");

@@ -123,14 +123,12 @@ void send_command(int press, int command)
   }
 }
 
-int read_serial(const int len)
+void read_serial(const int len)
 {
   char buffer[2];
   int err = read(ser_fd, &buffer, sizeof(buffer));
-  if (err <0) {
+  if (err <0)
     perror("error reading\n");
-    return -1;
-  }
   else if (err ==2) {
     if (buffer[1] == '0') {
       // mode change
@@ -150,7 +148,6 @@ int read_serial(const int len)
       send_command(press, diff + buffer[1] - '0' - 1);
     }
   }
-  return 0;
 }
 
 int main(int argc, char *argv[])
@@ -162,7 +159,7 @@ int main(int argc, char *argv[])
 
   msgs = lo_server_new("9961", osc_error);
 
-  sl = lo_address_new("ragtop", "9951");
+  sl = lo_address_new(argv[1], "9951");
   osc_host = lo_server_get_url(msgs);
   printf("we are %s\n", osc_host);
 
@@ -174,8 +171,7 @@ int main(int argc, char *argv[])
   int lo_fd = lo_server_get_socket_fd(msgs);
 
   /* midi blinken */
-  if (midi_init() != 0)
-    do_shutdown(1);
+  midi_init();
   update_mode();
   pthread_create(&midi_blinker, NULL, midi_blinken, (void*)NULL);
 
@@ -200,17 +196,15 @@ int main(int argc, char *argv[])
     retval = select(max_fd, &rfds, NULL, NULL, NULL); /* no timeout */
     if (retval == -1) {
       printf("select() error\n");
-      do_shutdown(1);
+      exit(1);
+
     } else if (retval > 0) {
       if (FD_ISSET(lo_fd, &rfds)) lo_server_recv_noblock(msgs, 0);
-      if (FD_ISSET(ser_fd, &rfds)) {
-        if (read_serial(2) <0) break;
-      }
+      if (FD_ISSET(ser_fd, &rfds)) read_serial(2);
     }
   }
 
   do_shutdown(0);
-  return 0;
 }
 
 int sl_ping_cb(const char *path, const char *types, lo_arg **argv, int argc,
@@ -252,8 +246,7 @@ int sl_state_cb(const char *path, const char *types, lo_arg **argv, int argc,
     mode+=97;
     char msg[2];
     sprintf(msg, "#%c", mode);
-    if (send_serial(msg) != 0)
-      do_shutdown(1);
+    send_serial(msg);
   }
   return 0;
 }
