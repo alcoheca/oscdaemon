@@ -5,7 +5,7 @@ SRCS = main.c serial.c osc.c midi.c
 OBJS = $(SRCS:.c=.o)
 MAIN = oscdaemon
 
-.PHONY: depend clean
+.PHONY: clean
 
 all:    $(MAIN)
 
@@ -18,7 +18,6 @@ $(MAIN): $(OBJS)
 clean:
 	$(RM) *.o *~ $(MAIN)
 
-depend: $(SRCS)
-	makedepend $(INCLUDES) $^
-
-# DO NOT DELETE THIS LINE -- make depend needs it
+install: all
+	mkdir -p ${DESTDIR}/usr/local/bin
+	install -m 0755 oscdaemon $(DESTDIR)/usr/local/bin/
